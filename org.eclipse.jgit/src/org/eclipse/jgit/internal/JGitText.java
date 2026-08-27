@@ -94,12 +94,11 @@ public class JGitText extends TranslationBundle {
 	/***/ public String binaryHunkInvalidLength;
 	/***/ public String binaryHunkLineTooShort;
 	/***/ public String binaryHunkMissingNewline;
-	/***/ public String bitmapAccessErrorForPackfile;
-	/***/ public String bitmapFailedToGet;
 	/***/ public String bitmapMissingObject;
 	/***/ public String bitmapsMustBePrepared;
 	/***/ public String bitmapUseNoopNoListener;
 	/***/ public String blameNotCommittedYet;
+	/***/ public String blameRegionCoverAllLines;
 	/***/ public String blockLimitNotMultipleOfBlockSize;
 	/***/ public String blockLimitNotPositive;
 	/***/ public String blockSizeNotPowerOf2;
@@ -108,6 +107,7 @@ public class JGitText extends TranslationBundle {
 	/***/ public String buildingBitmaps;
 	/***/ public String cachedPacksPreventsIndexCreation;
 	/***/ public String cachedPacksPreventsListingObjects;
+	/***/ public String cacheRegionAllOrNoneNull;
 	/***/ public String cannotAccessLastModifiedForSafeDeletion;
 	/***/ public String cannotBeCombined;
 	/***/ public String cannotBeRecursiveWhenTreesAreIncluded;
@@ -147,6 +147,7 @@ public class JGitText extends TranslationBundle {
 	/***/ public String cannotMoveIndexTo;
 	/***/ public String cannotMovePackTo;
 	/***/ public String cannotOpenService;
+    /***/ public String cannotOpenMidx;
 	/***/ public String cannotParseDate;
 	/***/ public String cannotParseGitURIish;
 	/***/ public String cannotPullOnARepoWithState;
@@ -290,11 +291,13 @@ public class JGitText extends TranslationBundle {
 	/***/ public String deepenSinceWithDeepen;
 	/***/ public String deleteBranchUnexpectedResult;
 	/***/ public String deleteFileFailed;
+	/***/ public String deleteLooseRef;
 	/***/ public String deletedOrphanInPackDir;
 	/***/ public String deleteRequiresZeroNewId;
 	/***/ public String deleteTagUnexpectedResult;
 	/***/ public String deletingBranches;
 	/***/ public String deletingNotSupported;
+	/***/ public String deprecatedTrustFolderStat;
 	/***/ public String depthMustBeAt1;
 	/***/ public String depthWithUnshallow;
 	/***/ public String destinationIsNotAWildcard;
@@ -493,6 +496,7 @@ public class JGitText extends TranslationBundle {
 	/***/ public String invalidTimeUnitValue2;
 	/***/ public String invalidTimeUnitValue3;
 	/***/ public String invalidTreeZeroLengthName;
+	/***/ public String invalidTrustStat;
 	/***/ public String invalidURL;
 	/***/ public String invalidWildcards;
 	/***/ public String invalidRefSpec;
@@ -525,6 +529,8 @@ public class JGitText extends TranslationBundle {
 	/***/ public String logLargerFiletimeDiff;
 	/***/ public String logSmallerFiletime;
 	/***/ public String logXDGConfigHomeInvalid;
+
+	/***/ public String logXDGCacheHomeInvalid;
 	/***/ public String looseObjectHandleIsStale;
 	/***/ public String maxCountMustBeNonNegative;
 	/***/ public String mergeConflictOnNonNoteEntries;
@@ -537,6 +543,10 @@ public class JGitText extends TranslationBundle {
 	/***/ public String mergeToolNotGivenError;
 	/***/ public String mergeToolNullError;
 	/***/ public String messageAndTaggerNotAllowedInUnannotatedTags;
+	/***/ public String midxChunkNeeded;
+	/***/ public String midxChunkRepeated;
+    /***/ public String midxChunkTooBig;
+	/***/ public String midxChunkUnknown;
 	/***/ public String minutesAgo;
 	/***/ public String mismatchOffset;
 	/***/ public String mismatchCRC;
@@ -557,6 +567,10 @@ public class JGitText extends TranslationBundle {
 	/***/ public String month;
 	/***/ public String months;
 	/***/ public String monthsAgo;
+	/***/ public String multiPackIndexFileIsTooLargeForJgit;
+	/***/ public String multiPackIndexPackCountMismatch;
+	/***/ public String multiPackIndexUnexpectedSize;
+	/***/ public String multiPackIndexWritingCancelled;
 	/***/ public String multipleMergeBasesFor;
 	/***/ public String nameMustNotBeNullOrEmpty;
 	/***/ public String need2Arguments;
@@ -583,6 +597,7 @@ public class JGitText extends TranslationBundle {
 	/***/ public String notACommitGraph;
 	/***/ public String notADIRCFile;
 	/***/ public String notAGitDirectory;
+	/***/ public String notAMIDX;
 	/***/ public String notAPACKFile;
 	/***/ public String notARef;
 	/***/ public String notASCIIString;
@@ -645,6 +660,7 @@ public class JGitText extends TranslationBundle {
 	/***/ public String personIdentEmailNonNull;
 	/***/ public String personIdentNameNonNull;
 	/***/ public String postCommitHookFailed;
+	/***/ public String precedenceTrustConfig;
 	/***/ public String prefixRemote;
 	/***/ public String problemWithResolvingPushRefSpecsLocally;
 	/***/ public String progressMonUploading;
@@ -657,6 +673,7 @@ public class JGitText extends TranslationBundle {
 	/***/ public String pushCertificateInvalidFieldValue;
 	/***/ public String pushCertificateInvalidHeader;
 	/***/ public String pushCertificateInvalidSignature;
+	/***/ public String pushCertificateInconsistentPushOptions;
 	/***/ public String pushDefaultNothing;
 	/***/ public String pushDefaultNoUpstream;
 	/***/ public String pushDefaultSimple;
@@ -804,6 +821,7 @@ public class JGitText extends TranslationBundle {
 	/***/ public String tagAlreadyExists;
 	/***/ public String tagNameInvalid;
 	/***/ public String tagOnRepoWithoutHEADCurrentlyNotSupported;
+	/***/ public String temporaryBufferIsDestroyed;
 	/***/ public String timeoutMeasureFsTimestampResolution;
 	/***/ public String transactionAborted;
 	/***/ public String theFactoryMustNotBeNull;
@@ -877,6 +895,7 @@ public class JGitText extends TranslationBundle {
 	/***/ public String unmergedPaths;
 	/***/ public String unpackException;
 	/***/ public String unreadableCommitGraph;
+	/***/ public String unreadableMIDX;
 	/***/ public String unreadableObjectSizeIndex;
 	/***/ public String unreadablePackIndex;
 	/***/ public String unrecognizedPackExtension;
@@ -890,6 +909,7 @@ public class JGitText extends TranslationBundle {
 	/***/ public String unsupportedEncryptionVersion;
 	/***/ public String unsupportedGC;
 	/***/ public String unsupportedMark;
+	/***/ public String unsupportedMIDXVersion;
 	/***/ public String unsupportedObjectIdVersion;
 	/***/ public String unsupportedObjectSizeIndexVersion;
 	/***/ public String unsupportedOperationNotAddAtEnd;

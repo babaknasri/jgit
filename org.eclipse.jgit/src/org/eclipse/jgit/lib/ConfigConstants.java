@@ -446,6 +446,13 @@ public final class ConfigConstants {
 	/** The "rebase" key */
 	public static final String CONFIG_KEY_REBASE = "rebase";
 
+	/**
+	 * The "checkout" key
+	 *
+	 * @since 7.2
+	 */
+	public static final String CONFIG_KEY_CHECKOUT = "checkout";
+
 	/** The "url" key */
 	public static final String CONFIG_KEY_URL = "url";
 
@@ -593,9 +600,19 @@ public final class ConfigConstants {
 
 	/**
 	 * The "trustfolderstat" key in the "core" section
+	 *
 	 * @since 3.6
+	 * @deprecated use {CONFIG_KEY_TRUST_STAT} instead
 	 */
+	@Deprecated(since = "7.2", forRemoval = true)
 	public static final String CONFIG_KEY_TRUSTFOLDERSTAT = "trustfolderstat";
+
+	/**
+	 * The "trustfilestat" key in the "core"section
+	 *
+	 * @since 7.2
+	 */
+	public static final String CONFIG_KEY_TRUST_STAT = "truststat";
 
 	/**
 	 * The "supportsAtomicFileCreation" key in the "core" section
@@ -1016,6 +1033,27 @@ public final class ConfigConstants {
 	public static final String CONFIG_KEY_TRUST_LOOSE_REF_STAT = "trustLooseRefStat";
 
 	/**
+	 * The "trustLooseRefStat" key
+	 *
+	 * @since 7.2
+	 */
+	public static final String CONFIG_KEY_TRUST_PACK_STAT = "trustPackStat";
+
+	/**
+	 * The "trustLooseObjectFileStat" key
+	 *
+	 * @since 7.2
+	 */
+	public static final String CONFIG_KEY_TRUST_LOOSE_OBJECT_STAT = "trustLooseObjectStat";
+
+	/**
+	 * The "trustTablesListStat" key
+	 *
+	 * @since 7.2
+	 */
+	public static final String CONFIG_KEY_TRUST_TABLESLIST_STAT = "trustTablesListStat";
+
+	/**
 	 * The "pack.preserveOldPacks" key
 	 *
 	 * @since 5.13.2
@@ -1063,4 +1101,32 @@ public final class ConfigConstants {
 	 * @since 7.1
 	 */
 	public static final String CONFIG_KEY_LOAD_REV_INDEX_IN_PARALLEL = "loadRevIndexInParallel";
+
+	/**
+	 * The "reftable" section
+	 *
+	 * @since 7.2
+	 */
+	public static final String CONFIG_REFTABLE_SECTION = "reftable";
+
+	/**
+	 * The "autorefresh" key
+	 *
+	 * @since 7.2
+	 */
+	public static final String CONFIG_KEY_AUTOREFRESH = "autorefresh";
+
+	/**
+	 * The "multiPackIndex" key
+	 *
+	 * @since 7.5
+	 */
+	public static final String CONFIG_KEY_MULTIPACKINDEX = "multiPackIndex";
+
+	/**
+	 * The "packRefs" key
+	 *
+	 * @since 7.6
+	 */
+	public static final String CONFIG_KEY_PACK_REFS = "packRefs";
 }

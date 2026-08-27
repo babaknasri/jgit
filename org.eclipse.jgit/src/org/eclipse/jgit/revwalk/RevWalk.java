@@ -19,12 +19,16 @@ import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Optional;
+import java.util.Map;
+import java.util.Set;
 
 import org.eclipse.jgit.annotations.NonNull;
 import org.eclipse.jgit.annotations.Nullable;
+import org.eclipse.jgit.errors.CancelledException;
 import org.eclipse.jgit.errors.CorruptObjectException;
 import org.eclipse.jgit.errors.IncorrectObjectTypeException;
 import org.eclipse.jgit.errors.LargeObjectException;
@@ -47,6 +51,7 @@ import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.revwalk.filter.RevFilter;
 import org.eclipse.jgit.treewalk.filter.TreeFilter;
 import org.eclipse.jgit.util.References;
+import org.eclipse.jgit.util.SystemReader;
 
 /**
  * Walks a commit graph and produces the matching commits in order.
@@ -159,11 +164,23 @@ public class RevWalk implements Iterable<RevCommit>, AutoCloseable {
 	static final int TREE_REV_FILTER_APPLIED = 1 << 7;
 
 	/**
+	 * Set on a RevObject marked for being unshallowed.
+	 * <p>
+	 * This flag is used by the RevWalk's generators for keeping track
+	 * that some objects have been marked uninteresting, however, they
+	 * need to allow the navigation to continue for managing the unshallow
+	 * of a shallow clone.
+	 *
+	 * @see DepthGenerator
+	 */
+	static final int UNSHALLOW = 1 << 8;
+
+	/**
 	 * Number of flag bits we keep internal for our own use. See above flags.
 	 */
-	static final int RESERVED_FLAGS = 8;
+	static final int RESERVED_FLAGS = 9;
 
-	private static final int APP_FLAGS = -1 & ~((1 << RESERVED_FLAGS) - 1);
+	static final int APP_FLAGS = -1 & ~((1 << RESERVED_FLAGS) - 1);
 
 	final ObjectReader reader;
 
@@ -201,7 +218,11 @@ public class RevWalk implements Iterable<RevCommit>, AutoCloseable {
 
 	private boolean firstParent;
 
+	private RevFilterStats revFilterStats;
+
 	boolean shallowCommitsInitialized;
+
+	private ProgressMonitor monitor = NullProgressMonitor.INSTANCE;
 
 	private enum GetMergedIntoStrategy {
 		RETURN_ON_FIRST_FOUND, RETURN_ON_FIRST_NOT_FOUND, EVALUATE_ALL
@@ -243,6 +264,7 @@ public class RevWalk implements Iterable<RevCommit>, AutoCloseable {
 		treeFilter = TreeFilter.ALL;
 		this.closeReader = closeReader;
 		commitGraph = null;
+		revFilterStats = new RevFilterStats();
 	}
 
 	static AbstractRevQueue newDateRevQueue(boolean firstParent) {
@@ -261,12 +283,9 @@ public class RevWalk implements Iterable<RevCommit>, AutoCloseable {
 		return new DateRevQueue(g);
 	}
 
-	@SuppressWarnings("boxing")
 	private static boolean usePriorityQueue() {
-		return Optional
-				.ofNullable(System.getProperty("REVWALK_USE_PRIORITY_QUEUE")) //$NON-NLS-1$
-							.map(Boolean::parseBoolean)
-							.orElse(false);
+		return Boolean.parseBoolean(SystemReader.getInstance()
+				.getProperty("REVWALK_USE_PRIORITY_QUEUE")); //$NON-NLS-1$
 	}
 
 	/**
@@ -523,6 +542,27 @@ public class RevWalk implements Iterable<RevCommit>, AutoCloseable {
 	}
 
 	/**
+	 * Determine if a <code>commit</code> is merged into any of the given
+	 * <code>revs</code>.
+	 *
+	 * @param commit
+	 *            commit the caller thinks is reachable from <code>revs</code>.
+	 * @param revs
+	 *            commits to start iteration from, and which is most likely a
+	 *            descendant (child) of <code>commit</code>.
+	 * @return true if commit is merged into any of the revs; false otherwise.
+	 * @throws java.io.IOException
+	 *             a pack file or loose object could not be read.
+	 * @since 6.10.1
+	 */
+	public boolean isMergedIntoAnyCommit(RevCommit commit, Collection<RevCommit> revs)
+			throws IOException {
+		return getCommitsMergedInto(commit, revs,
+				GetMergedIntoStrategy.RETURN_ON_FIRST_FOUND,
+				NullProgressMonitor.INSTANCE).size() > 0;
+	}
+
+	/**
 	 * Determine if a <code>commit</code> is merged into all of the given
 	 * <code>refs</code>.
 	 *
@@ -545,7 +585,26 @@ public class RevWalk implements Iterable<RevCommit>, AutoCloseable {
 
 	private List<Ref> getMergedInto(RevCommit needle, Collection<Ref> haystacks,
 			Enum returnStrategy, ProgressMonitor monitor) throws IOException {
+		Map<RevCommit, List<Ref>> refsByCommit = new HashMap<>();
+		for (Ref r : haystacks) {
+			RevObject o = peel(parseAny(r.getObjectId()));
+			if (!(o instanceof RevCommit)) {
+				continue;
+			}
+			refsByCommit.computeIfAbsent((RevCommit) o, c -> new ArrayList<>()).add(r);
+		}
+		monitor.update(1);
 		List<Ref> result = new ArrayList<>();
+		for (RevCommit c : getCommitsMergedInto(needle, refsByCommit.keySet(),
+				returnStrategy, monitor)) {
+			result.addAll(refsByCommit.get(c));
+		}
+		return result;
+	}
+
+	private Set<RevCommit> getCommitsMergedInto(RevCommit needle, Collection<RevCommit> haystacks,
+			Enum returnStrategy, ProgressMonitor monitor) throws IOException {
+		Set<RevCommit> result = new HashSet<>();
 		List<RevCommit> uninteresting = new ArrayList<>();
 		List<RevCommit> marked = new ArrayList<>();
 		RevFilter oldRF = filter;
@@ -561,28 +620,23 @@ public class RevWalk implements Iterable<RevCommit>, AutoCloseable {
 				needle.parseHeaders(this);
 			}
 			int cutoff = needle.getGeneration();
-			for (Ref r : haystacks) {
+			for (RevCommit c : haystacks) {
 				if (monitor.isCancelled()) {
 					return result;
 				}
 				monitor.update(1);
-				RevObject o = peel(parseAny(r.getObjectId()));
-				if (!(o instanceof RevCommit)) {
-					continue;
-				}
-				RevCommit c = (RevCommit) o;
 				reset(UNINTERESTING | TEMP_MARK);
 				markStart(c);
 				boolean commitFound = false;
 				RevCommit next;
-				while ((next = next()) != null) {
+				while ((next = next()) != null && !monitor.isCancelled()) {
 					if (next.getGeneration() < cutoff) {
 						markUninteresting(next);
 						uninteresting.add(next);
 					}
 					if (References.isSameObject(next, needle)
 							|| (next.flags & TEMP_MARK) != 0) {
-						result.add(r);
+						result.add(c);
 						if (returnStrategy == GetMergedIntoStrategy.RETURN_ON_FIRST_FOUND) {
 							return result;
 						}
@@ -627,7 +681,39 @@ public class RevWalk implements Iterable<RevCommit>, AutoCloseable {
 	 */
 	public RevCommit next() throws MissingObjectException,
 			IncorrectObjectTypeException, IOException {
+		checkCancelled();
 		return pending.next();
+	}
+
+	/**
+	 * Set a progress monitor to cooperatively cancel this walk.
+	 * <p>
+	 * The walk periodically checks {@link ProgressMonitor#isCancelled()}
+	 * during traversal and aborts with a
+	 * {@link org.eclipse.jgit.errors.CancelledException} once the monitor
+	 * reports cancellation.
+	 *
+	 * @param monitor
+	 *            monitor to poll for cancellation, or {@code null} to stop
+	 *            checking for cancellation.
+	 * @since 7.8
+	 */
+	public void setProgressMonitor(ProgressMonitor monitor) {
+		this.monitor = monitor == null ? NullProgressMonitor.INSTANCE
+				: monitor;
+	}
+
+	/**
+	 * Check whether this walk has been cooperatively cancelled.
+	 *
+	 * @throws CancelledException
+	 *             if the configured {@link ProgressMonitor} reports
+	 *             cancellation, or if the current thread was interrupted.
+	 */
+	void checkCancelled() throws CancelledException {
+		if (monitor.isCancelled() || Thread.currentThread().isInterrupted()) {
+			throw new CancelledException(JGitText.get().operationCanceled);
+		}
 	}
 
 	/**
@@ -796,6 +882,17 @@ public class RevWalk implements Iterable<RevCommit>, AutoCloseable {
 	}
 
 	/**
+	 * Get stats recorded within the RevFilter used in the RevWalk.
+	 *
+	 * @return {@link RevFilterStats} with stats recorded by RevFilters.
+	 *
+	 * @since 7.8
+	 */
+	public RevFilterStats getRevFilterStats() {
+		return revFilterStats;
+	}
+
+	/**
 	 * Should the body of a commit or tag be retained after parsing its headers?
 	 * <p>
 	 * Usually the body is always retained, but some application code might not
@@ -923,10 +1020,10 @@ public class RevWalk implements Iterable<RevCommit>, AutoCloseable {
 	}
 
 	/**
-	 * This method is intended to be invoked only by {@link RevCommitCG}, in
-	 * order to give commit the correct graphPosition before accessing the
-	 * commit-graph. In this way, the headers of the commit can be obtained in
-	 * constant time.
+	 * This method is intended to be invoked only by
+	 * {@link RevCommit#parseInGraph(RevWalk)}, in order to give commit the
+	 * correct graphPosition before accessing the commit-graph. In this way, the
+	 * headers of the commit can be obtained in constant time.
 	 *
 	 * @param id
 	 *            name of the commit object.
@@ -1478,6 +1575,32 @@ public class RevWalk implements Iterable<RevCommit>, AutoCloseable {
 		}
 	}
 
+	/**
+	 * Arrange for flags to be recycled at the next {@code reset}.
+	 * <p>
+	 * Unlike {@link #freeFlag(int)}, this <em>always</em> defers: the flags
+	 * join the {@link #delayFreeFlags} set and are only returned to the
+	 * {@link #freeFlags} by an invocation of a {@code reset} method. If the
+	 * flags were marked {@code retainOnReset}, that request is cleared.
+	 * <p>
+	 * <strong>Only call this while a {@link Generator} is under
+	 * construction</strong> - i.e. from within the call chain of
+	 * {@link StartGenerator#next()}. At that point {@link #pending} is still
+	 * the {@link StartGenerator}, so {@link #isNotStarted()} reports
+	 * {@code true} and {@link #freeFlag(int)} would return the flags to
+	 * {@link #freeFlags} immediately. The next {@link #newFlag(String)} would
+	 * then hand the same bits to an unrelated caller, silently corrupting both
+	 * walks. Calling this from anywhere else is almost certainly a mistake; use
+	 * {@link #disposeFlag(RevFlag)} instead.
+	 *
+	 * @param mask
+	 *            the flag bits to recycle at the next {@code reset}.
+	 */
+	final void freeFlagOnReset(int mask) {
+		retainOnReset &= ~mask;
+		delayFreeFlags |= mask;
+	}
+
 	private void finishDelayedFreeFlags() {
 		if (delayFreeFlags != 0) {
 			freeFlags |= delayFreeFlags;
@@ -1577,6 +1700,7 @@ public class RevWalk implements Iterable<RevCommit>, AutoCloseable {
 		roots.clear();
 		queue = newDateRevQueue(firstParent);
 		pending = new StartGenerator(this);
+		revFilterStats = new RevFilterStats();
 	}
 
 	/**
@@ -1599,6 +1723,7 @@ public class RevWalk implements Iterable<RevCommit>, AutoCloseable {
 		queue = newDateRevQueue(firstParent);
 		pending = new StartGenerator(this);
 		shallowCommitsInitialized = false;
+		revFilterStats = new RevFilterStats();
 	}
 
 	/**
@@ -1716,16 +1841,28 @@ public class RevWalk implements Iterable<RevCommit>, AutoCloseable {
 	 * @param id
 	 *            the object this walker requires a commit reference for.
 	 * @return a new unparsed reference for the object.
+	 *
+	 * @nooverride Since 7.8 This method is not intended to be re-implemented or
+	 *             extended by clients. Override
+	 *             {@link #createCommit(AnyObjectId, int)} instead.
 	 */
 	protected RevCommit createCommit(AnyObjectId id) {
 		return createCommit(id, commitGraph().findGraphPosition(id));
 	}
 
-	private RevCommit createCommit(AnyObjectId id, int graphPos) {
-		if (graphPos >= 0) {
-			return new RevCommitCG(id, graphPos);
-		}
-		return new RevCommit(id);
+	/**
+	 * Construct a new unparsed commit for the given object.
+	 *
+	 * @param id
+	 *            the object this walker requires a commit reference for.
+	 * @param graphPos
+	 *            the position of the commit in the commit graph or {@code -1}
+	 *            if the commit is not present in the commit graph
+	 * @return a new unparsed reference for the object.
+	 * @since 7.8
+	 */
+	protected RevCommit createCommit(AnyObjectId id, int graphPos) {
+		return new RevCommit(id, graphPos);
 	}
 
 	void carryFlagsImpl(RevCommit c) {
@@ -1787,6 +1924,189 @@ public class RevWalk implements Iterable<RevCommit>, AutoCloseable {
 			} else {
 				lookupCommit(id).parents = RevCommit.NO_PARENTS;
 			}
+		}
+	}
+
+	/**
+	 * Statistics related RevFilter collected during the lifecycle of RevWalk.
+	 *
+	 * @since 7.8
+	 */
+	public static final class RevFilterStats {
+
+		private long changedPathFilterTruePositive;
+
+		private long changedPathFilterFalsePositive;
+
+		private long changedPathFilterNegative;
+
+		private long numCommitsThroughTreeRevFilter;
+
+		private long numTreesParsedInTreeRevFilter;
+
+		private long numMergeCommitsUsedBaseParentAsRedirect;
+
+		private long numMergeCommitsUsedPullRequestParentAsRedirect;
+
+		private long numMergeCommitsHadNoRedirect;
+
+		private long numMergeCommitsHadNoDiffWithAnyInterestingParent;
+
+		private RevFilterStats() {
+		}
+
+		/**
+		 * Increment the numMergeCommitsUsedBaseParentAsRedirect count
+		 */
+		public void incrementNumMergeCommitsUsedBaseParentAsRedirect() {
+			numMergeCommitsUsedBaseParentAsRedirect++;
+		}
+
+		/**
+		 * Increment the numMergeCommitsUsedPullRequestParentAsRedirect count
+		 */
+		public void incrementNumMergeCommitsUsedPullRequestParentAsRedirect() {
+			numMergeCommitsUsedPullRequestParentAsRedirect++;
+		}
+
+		/**
+		 * Increment the numMergeCommitsHadNoDiffWithAnyInterestingParent count
+		 */
+		public void incrementNumMergeCommitsHadNoDiffButNoInterestingParent() {
+			numMergeCommitsHadNoDiffWithAnyInterestingParent++;
+		}
+
+		/**
+		 * Increment the numMergeCommitsHadNoRedirect count
+		 */
+		public void incrementNumMergeCommitsHadNoRedirect() {
+			numMergeCommitsHadNoRedirect++;
+		}
+
+		/**
+		 * Increment the changedPathFilterTruePositive count
+		 */
+		void incrementChangedPathFilterTruePositive() {
+			changedPathFilterTruePositive++;
+		}
+
+		/**
+		 * Increment the changedPathFilterFalsePositive count
+		 */
+		void incrementChangedPathFilterFalsePositive() {
+			changedPathFilterFalsePositive++;
+		}
+
+		/**
+		 * Increment the changedPathFilterNegative count
+		 */
+		void incrementChangedPathFilterNegative() {
+			changedPathFilterNegative++;
+		}
+
+		/**
+		 * Increment the numCommitsThroughTreeRevFilter count
+		 */
+		void incrementCommitsThroughTreeRevFilter() {
+			numCommitsThroughTreeRevFilter++;
+		}
+
+		/**
+		 * Increment the numTreesParsedInTreeRevFilter count
+		 *
+		 * @param numTrees
+		 *            number of trees
+		 */
+		void incrementNumTreesParsedInTreeRevFilter(int numTrees) {
+			numTreesParsedInTreeRevFilter += numTrees;
+		}
+
+		/**
+		 * Return the number of merge commits used the base parent to redirect
+		 * the RevWalk
+		 *
+		 * @return count
+		 */
+		public long getNumMergeCommitsUsedBaseParentAsRedirect() {
+			return numMergeCommitsUsedBaseParentAsRedirect;
+		}
+
+		/**
+		 * Return the number of merge commits used a pull request parent to
+		 * redirect the RevWalk
+		 *
+		 * @return count
+		 */
+		public long getNumMergeCommitsUsedPullRequestParentAsRedirect() {
+			return numMergeCommitsUsedPullRequestParentAsRedirect;
+		}
+
+		/**
+		 * Return the number of merge commits did not need be redirected
+		 *
+		 * @return count
+		 */
+		public long getNumMergeCommitsHadNoRedirect() {
+			return numMergeCommitsHadNoRedirect;
+		}
+
+		/**
+		 * Return the number of merge commits had no diff and had no interesting
+		 * parent to redirect
+		 *
+		 * @return count
+		 */
+		public long getNumMergeCommitsHadNoDiffWithAnyInterestingParent() {
+			return numMergeCommitsHadNoDiffWithAnyInterestingParent;
+		}
+
+		/**
+		 * Return how many times a changed path filter correctly predicted that
+		 * a path was changed in a commit, for statistics gathering purposes.
+		 *
+		 * @return count of true positives
+		 */
+		public long getChangedPathFilterTruePositive() {
+			return changedPathFilterTruePositive;
+		}
+
+		/**
+		 * Return how many times a changed path filter wrongly predicted that a
+		 * path was changed in a commit, for statistics gathering purposes.
+		 *
+		 * @return count of false positives
+		 */
+		public long getChangedPathFilterFalsePositive() {
+			return changedPathFilterFalsePositive;
+		}
+
+		/**
+		 * Return how many times a changed path filter predicted that a path was
+		 * not changed in a commit (allowing that commit to be skipped), for
+		 * statistics gathering purposes.
+		 *
+		 * @return count of negatives
+		 */
+		public long getChangedPathFilterNegative() {
+			return changedPathFilterNegative;
+		}
+
+		/**
+		 * Return how many times a commit was evaluated by treeRevFilter
+		 *
+		 * @return count of treeRevFilter include calls
+		 */
+		public long getNumCommitsThroughTreeRevFilter() {
+			return numCommitsThroughTreeRevFilter;
+		}
+
+		/**
+		 * Return how many times a tree was parsed within TreeRevFilter
+		 *
+		 * @return count of trees parsed within TreeRevFilter
+		 */
+		public long getNumTreesParsedInTreeRevFilter() {
+			return numTreesParsedInTreeRevFilter;
 		}
 	}
 }

@@ -158,7 +158,7 @@ public class UploadPack implements Closeable {
 		 * @param implied
 		 *            the implied policy based on its bitmask.
 		 * @return true if the policy is implied.
-		 * @since 7.1
+		 * @since 6.10.1
 		 */
 		public boolean implies(RequestPolicy implied) {
 			return (bitmask & implied.bitmask) != 0;
@@ -189,9 +189,12 @@ public class UploadPack implements Closeable {
 				throws PackProtocolException, IOException;
 	}
 
-	/*
+	/**
 	 * {@link java.util.function.Consumer} doesn't allow throwing checked
 	 * exceptions. Define our own to propagate IOExceptions.
+	 *
+	 * @param <R>
+	 *            input argument
 	 */
 	@FunctionalInterface
 	private static interface IOConsumer<R> {
@@ -1394,6 +1397,7 @@ public class UploadPack implements Closeable {
 		if (transferConfig.isAdvertiseObjectInfo()) {
 			caps.add(COMMAND_OBJECT_INFO);
 		}
+		caps.add(OPTION_AGENT + "=" + UserAgent.get());
 
 		return caps;
 	}
@@ -2225,7 +2229,7 @@ public class UploadPack implements Closeable {
 		walk.resetRetain(SAVE);
 		walk.markStart((RevCommit) want);
 		if (oldestTime != 0)
-			walk.setRevFilter(CommitTimeRevFilter.after(oldestTime * 1000L));
+			walk.setRevFilter(CommitTimeRevFilter.after(Instant.ofEpochSecond(oldestTime)));
 		for (;;) {
 			final RevCommit c = walk.next();
 			if (c == null)

@@ -24,6 +24,7 @@ HELPERS = glob(
     "nls/MissingPropertyBundle.java",
     "nls/NoPropertiesBundle.java",
     "nls/NonTranslatedBundle.java",
+    "revwalk/AbstractRevWalkWithCommitGraphTest.java",
     "revwalk/RevQueueTestCase.java",
     "revwalk/RevWalkTestCase.java",
     "transport/ObjectIdMatcher.java",
@@ -52,6 +53,12 @@ tests(tests = glob(
     ["tst/**/*.java"],
     exclude = HELPERS + DATA + EXCLUDED,
 ))
+
+tests(
+    extra_tags = ["ext"],
+    srcprefix = "exttst/",
+    tests = glob(["exttst/**/*.java"]),
+)
 
 # Non abstract base classes used for tests by other test classes
 BASE = [

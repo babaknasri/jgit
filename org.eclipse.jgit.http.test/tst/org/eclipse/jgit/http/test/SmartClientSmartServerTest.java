@@ -52,9 +52,9 @@ import jakarta.servlet.ServletResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
-import org.eclipse.jetty.ee10.servlet.FilterHolder;
-import org.eclipse.jetty.ee10.servlet.ServletContextHandler;
-import org.eclipse.jetty.ee10.servlet.ServletHolder;
+import org.eclipse.jetty.ee11.servlet.FilterHolder;
+import org.eclipse.jetty.ee11.servlet.ServletContextHandler;
+import org.eclipse.jetty.ee11.servlet.ServletHolder;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.TransportConfigCallback;
 import org.eclipse.jgit.errors.NoRemoteRepositoryException;
@@ -68,6 +68,7 @@ import org.eclipse.jgit.junit.TestRepository;
 import org.eclipse.jgit.junit.TestRng;
 import org.eclipse.jgit.junit.http.AccessEvent;
 import org.eclipse.jgit.junit.http.AppServer;
+import org.eclipse.jgit.junit.http.AppServerBase;
 import org.eclipse.jgit.lib.ConfigConstants;
 import org.eclipse.jgit.lib.Constants;
 import org.eclipse.jgit.lib.NullProgressMonitor;
@@ -111,7 +112,7 @@ public class SmartClientSmartServerTest extends AllProtocolsHttpTestCase {
 	private Repository remoteRepository;
 
 	private CredentialsProvider testCredentials = new UsernamePasswordCredentialsProvider(
-			AppServer.username, AppServer.password);
+			AppServerBase.username, AppServerBase.password);
 
 	private URIish remoteURI;
 
@@ -998,7 +999,7 @@ public class SmartClientSmartServerTest extends AllProtocolsHttpTestCase {
 				Transport t = Transport.open(dst, authURI)) {
 			assertFalse(dst.getObjectDatabase().has(A_txt));
 			((TransportHttp) t).setPreemptiveBasicAuthentication(
-					AppServer.username, AppServer.password);
+					AppServerBase.username, AppServerBase.password);
 			t.fetch(NullProgressMonitor.INSTANCE, mirror(master));
 			assertTrue(dst.getObjectDatabase().has(A_txt));
 			assertEquals(B, dst.exactRef(master).getObjectId());
@@ -1018,7 +1019,7 @@ public class SmartClientSmartServerTest extends AllProtocolsHttpTestCase {
 				Transport t = Transport.open(dst, authURI)) {
 			assertFalse(dst.getObjectDatabase().has(A_txt));
 			((TransportHttp) t).setPreemptiveBasicAuthentication(
-					AppServer.username, AppServer.password);
+					AppServerBase.username, AppServerBase.password);
 			((TransportHttp) t).setPreemptiveBasicAuthentication(null, null);
 			t.setCredentialsProvider(testCredentials);
 			t.fetch(NullProgressMonitor.INSTANCE, mirror(master));
@@ -1043,7 +1044,7 @@ public class SmartClientSmartServerTest extends AllProtocolsHttpTestCase {
 				Transport t = Transport.open(dst, authURI)) {
 			assertFalse(dst.getObjectDatabase().has(A_txt));
 			((TransportHttp) t).setPreemptiveBasicAuthentication(
-					AppServer.username, AppServer.password);
+					AppServerBase.username, AppServerBase.password);
 			t.fetch(NullProgressMonitor.INSTANCE, mirror(master));
 			assertTrue(dst.getObjectDatabase().has(A_txt));
 			assertEquals(B, dst.exactRef(master).getObjectId());
@@ -1053,7 +1054,7 @@ public class SmartClientSmartServerTest extends AllProtocolsHttpTestCase {
 			assertFetchRequests(requests, 0);
 			assertThrows(IllegalStateException.class,
 					() -> ((TransportHttp) t).setPreemptiveBasicAuthentication(
-							AppServer.username, AppServer.password));
+							AppServerBase.username, AppServerBase.password));
 			assertThrows(IllegalStateException.class, () -> ((TransportHttp) t)
 					.setPreemptiveBasicAuthentication(null, null));
 		}
@@ -1066,7 +1067,7 @@ public class SmartClientSmartServerTest extends AllProtocolsHttpTestCase {
 				Transport t = Transport.open(dst, authURI)) {
 			assertFalse(dst.getObjectDatabase().has(A_txt));
 			((TransportHttp) t).setPreemptiveBasicAuthentication(
-					AppServer.username, AppServer.password + 'x');
+					AppServerBase.username, AppServerBase.password + 'x');
 			t.setCredentialsProvider(testCredentials);
 			t.fetch(NullProgressMonitor.INSTANCE, mirror(master));
 			assertTrue(dst.getObjectDatabase().has(A_txt));
@@ -1090,7 +1091,7 @@ public class SmartClientSmartServerTest extends AllProtocolsHttpTestCase {
 				Transport t = Transport.open(dst, authURI)) {
 			assertFalse(dst.getObjectDatabase().has(A_txt));
 			((TransportHttp) t).setPreemptiveBasicAuthentication(
-					AppServer.username, AppServer.password + 'x');
+					AppServerBase.username, AppServerBase.password + 'x');
 			TransportException e = assertThrows(TransportException.class,
 					() -> t.fetch(NullProgressMonitor.INSTANCE,
 							mirror(master)));
@@ -1108,8 +1109,8 @@ public class SmartClientSmartServerTest extends AllProtocolsHttpTestCase {
 
 	@Test
 	public void testInitialClone_WithUserInfo() throws Exception {
-		URIish withUserInfo = authURI.setUser(AppServer.username)
-				.setPass(AppServer.password);
+		URIish withUserInfo = authURI.setUser(AppServerBase.username)
+				.setPass(AppServerBase.password);
 		try (Repository dst = createBareRepository();
 				Transport t = Transport.open(dst, withUserInfo)) {
 			assertFalse(dst.getObjectDatabase().has(A_txt));
@@ -1127,13 +1128,13 @@ public class SmartClientSmartServerTest extends AllProtocolsHttpTestCase {
 
 	@Test
 	public void testInitialClone_PreAuthOverridesUserInfo() throws Exception {
-		URIish withUserInfo = authURI.setUser(AppServer.username)
-				.setPass(AppServer.password + 'x');
+		URIish withUserInfo = authURI.setUser(AppServerBase.username)
+				.setPass(AppServerBase.password + 'x');
 		try (Repository dst = createBareRepository();
 				Transport t = Transport.open(dst, withUserInfo)) {
 			assertFalse(dst.getObjectDatabase().has(A_txt));
 			((TransportHttp) t).setPreemptiveBasicAuthentication(
-					AppServer.username, AppServer.password);
+					AppServerBase.username, AppServerBase.password);
 			t.fetch(NullProgressMonitor.INSTANCE, mirror(master));
 			assertTrue(dst.getObjectDatabase().has(A_txt));
 			assertEquals(B, dst.exactRef(master).getObjectId());
@@ -1174,7 +1175,7 @@ public class SmartClientSmartServerTest extends AllProtocolsHttpTestCase {
 				Transport t = Transport.open(dst, authURI)) {
 			assertFalse(dst.getObjectDatabase().has(A_txt));
 			t.setCredentialsProvider(new UsernamePasswordCredentialsProvider(
-					AppServer.username, "wrongpassword"));
+					AppServerBase.username, "wrongpassword"));
 			t.fetch(NullProgressMonitor.INSTANCE, mirror(master));
 			fail("Should not have succeeded -- wrong password");
 		} catch (TransportException e) {
@@ -1728,7 +1729,8 @@ public class SmartClientSmartServerTest extends AllProtocolsHttpTestCase {
 		assertEquals(Q, remoteRepository.exactRef(dstName).getObjectId());
 		fsck(remoteRepository, Q);
 
-		final ReflogReader log = remoteRepository.getReflogReader(dstName);
+		final ReflogReader log = remoteRepository.getRefDatabase()
+				.getReflogReader(dstName);
 		assertNotNull("has log for " + dstName, log);
 
 		final ReflogEntry last = log.getLastEntry();

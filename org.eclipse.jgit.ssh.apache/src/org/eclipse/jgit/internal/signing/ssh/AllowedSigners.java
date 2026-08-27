@@ -21,6 +21,7 @@ import java.text.MessageFormat;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
@@ -36,8 +37,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.TimeZone;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -63,8 +62,6 @@ final class AllowedSigners extends ModifiableFileWatcher {
 	private static final String VALID_AFTER = "valid-after="; //$NON-NLS-1$
 
 	private static final String VALID_BEFORE = "valid-before="; //$NON-NLS-1$
-
-	private static final String SSH_KEY_PREFIX = "ssh-"; //$NON-NLS-1$
 
 	private static final DateTimeFormatter SSH_DATE_FORMAT = new DateTimeFormatterBuilder()
 			.appendValue(ChronoField.YEAR, 4)
@@ -323,8 +320,7 @@ final class AllowedSigners extends ModifiableFileWatcher {
 				&& Character.isWhitespace(line.charAt(CERT_AUTHORITY.length())))
 				|| matches(line, NAMESPACES, 0)
 				|| matches(line, VALID_AFTER, 0)
-				|| matches(line, VALID_BEFORE, 0)
-				|| matches(line, SSH_KEY_PREFIX, 0)) {
+				|| matches(line, VALID_BEFORE, 0)) {
 			throw new StreamCorruptedException(
 					SshdText.get().signAllowedSignersNoIdentities);
 		}
@@ -449,7 +445,9 @@ final class AllowedSigners extends ModifiableFileWatcher {
 					s.substring(start)));
 		}
 		String keyType = s.substring(start, endOfKeyType);
-		if (!keyType.startsWith(SSH_KEY_PREFIX)) {
+		String key = s.substring(startOfKey, i);
+		if (!key.startsWith("AAAA")) { //$NON-NLS-1$
+			// base64 encoded SSH keys always start with four 'A's.
 			throw new StreamCorruptedException(MessageFormat.format(
 					SshdText.get().signAllowedSignersPublicKeyParsing,
 					s.substring(start)));
@@ -482,12 +480,8 @@ final class AllowedSigners extends ModifiableFileWatcher {
 		if (isUTC) {
 			return time.atOffset(ZoneOffset.UTC).toInstant();
 		}
-		TimeZone tz = SystemReader.getInstance().getTimeZone();
-		// Since there are a few TimeZone IDs that are not recognized by ZoneId,
-		// use offsets.
-		return time.atOffset(ZoneOffset.ofTotalSeconds(
-				(int) TimeUnit.MILLISECONDS.toSeconds(tz.getRawOffset())))
-				.toInstant();
+		ZoneId tz = SystemReader.getInstance().getTimeZoneId();
+		return time.atZone(tz).toInstant();
 	}
 
 	// OpenSSH uses the backslash *only* to quote the double-quote.

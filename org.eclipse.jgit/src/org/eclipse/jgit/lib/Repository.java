@@ -26,6 +26,8 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.UncheckedIOException;
 import java.net.URISyntaxException;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -33,10 +35,12 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 
 import org.eclipse.jgit.annotations.NonNull;
@@ -131,6 +135,8 @@ public abstract class Repository implements AutoCloseable {
 	private final File indexFile;
 
 	private final String initialBranch;
+
+	private final AtomicReference<Boolean> caseInsensitiveWorktree = new AtomicReference<>();
 
 	/**
 	 * Initialize a new repository instance.
@@ -1369,6 +1375,8 @@ public abstract class Repository implements AutoCloseable {
 	 *
 	 * For portability reasons '\' is excluded
 	 *
+	 * @see <a href="http://www.kernel.org/pub/software/scm/git/docs/git-check-ref-format.html"
+	 *      >git-check-ref-format(1) manual page</a>
 	 * @param refName a {@link java.lang.String} object.
 	 * @return true if refName is a valid ref name
 	 */
@@ -1577,6 +1585,40 @@ public abstract class Repository implements AutoCloseable {
 	}
 
 	/**
+	 * Tells whether the work tree is on a case-insensitive file system.
+	 *
+	 * @return {@code true} if the work tree is case-insensitive; {@code false}
+	 *         otherwise
+	 * @throws NoWorkTreeException
+	 *             if the repository is bare
+	 * @since 7.2
+	 */
+	public boolean isWorkTreeCaseInsensitive() throws NoWorkTreeException {
+		Boolean flag = caseInsensitiveWorktree.get();
+		if (flag == null) {
+			File directory = getWorkTree();
+			// See if we can find ".git" also as ".GIT".
+			File dotGit = new File(directory, Constants.DOT_GIT);
+			if (Files.exists(dotGit.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+				dotGit = new File(directory,
+						Constants.DOT_GIT.toUpperCase(Locale.ROOT));
+				flag = Boolean.valueOf(Files.exists(dotGit.toPath(),
+						LinkOption.NOFOLLOW_LINKS));
+			} else {
+				// Fall back to a mostly sane default. On Mac, HFS+ and APFS
+				// partitions are case-insensitive by default but can be
+				// configured to be case-sensitive.
+				SystemReader system = SystemReader.getInstance();
+				flag = Boolean.valueOf(system.isWindows() || system.isMacOS());
+			}
+			if (!caseInsensitiveWorktree.compareAndSet(null, flag)) {
+				flag = caseInsensitiveWorktree.get();
+			}
+		}
+		return flag.booleanValue();
+	}
+
+	/**
 	 * Force a scan for changed refs. Fires an IndexChangedEvent(false) if
 	 * changes are detected.
 	 *
@@ -1692,10 +1734,13 @@ public abstract class Repository implements AutoCloseable {
 	 * @throws java.io.IOException
 	 *             the ref could not be accessed.
 	 * @since 3.0
+	 * @deprecated use {@code #getRefDatabase().getReflogReader(String)} instead
 	 */
+	@Deprecated(since = "7.2")
 	@Nullable
-	public abstract ReflogReader getReflogReader(String refName)
-			throws IOException;
+	public ReflogReader getReflogReader(String refName) throws IOException {
+		return getRefDatabase().getReflogReader(refName);
+	}
 
 	/**
 	 * Get the reflog reader. Subclasses should override this method and provide
@@ -1703,15 +1748,17 @@ public abstract class Repository implements AutoCloseable {
 	 *
 	 * @param ref
 	 *            a Ref
-	 * @return a {@link org.eclipse.jgit.lib.ReflogReader} for the supplied ref,
-	 *         or {@code null} if the ref does not exist.
+	 * @return a {@link org.eclipse.jgit.lib.ReflogReader} for the supplied ref.
 	 * @throws IOException
 	 *             if an IO error occurred
 	 * @since 5.13.2
+	 * @deprecated use {@code #getRefDatabase().getReflogReader(Ref)} instead
 	 */
-	public @Nullable ReflogReader getReflogReader(@NonNull	Ref ref)
+	@Deprecated(since = "7.2")
+	@NonNull
+	public ReflogReader getReflogReader(@NonNull Ref ref)
 			throws IOException {
-		return getReflogReader(ref.getName());
+		return getRefDatabase().getReflogReader(ref);
 	}
 
 	/**
